@@ -1,0 +1,6 @@
+[
+  { "kind": "project",   "label": "proyek",    "value": "chatNDT" },
+  { "kind": "workspace", "label": "workspace", "value": "/media/hyuzea/ws-test" },
+  { "kind": "user",      "label": "pengguna",  "value": "hyuzea" },
+  { "kind": "dir",       "label": "unduhan",   "value": "/media/hyuzea/ws-test" },
+]
