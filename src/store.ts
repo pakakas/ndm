@@ -35,7 +35,7 @@ export class Store {
   private constructor(private sql: SQL) {}
 
   /** url contoh: "sqlite://rlhf.db" atau "sqlite://:memory:" */
-  static async open(url = "sqlite://rlhf.db"): Promise<Store> {
+  static async open(url = "sqlite://data/ndm.db"): Promise<Store> {
     const sql = new SQL(url);
     await createSchema(sql);
     await seedTools(sql);

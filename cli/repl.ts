@@ -11,7 +11,7 @@ import type { Session } from "./session";
 import { handle } from "./handle";
 
 export async function startRepl(rlhf: boolean, debug: boolean): Promise<void> {
-  const store = await Store.open(process.env.RLHF_DB ?? "sqlite://rlhf.db");
+  const store = await Store.open(process.env.RLHF_DB ?? "sqlite://data/ndm.db");
 
   loadWeights(await store.loadWeights());
   loadSenseWeights(await store.loadSenseWeights());
