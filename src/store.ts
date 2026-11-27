@@ -11,12 +11,13 @@
 //   word_log(word_id, ...)        penjelasan pengguna yang mengajarkan kata itu
 //   context_stats(prev,pos,next,n) hitungan konteks untuk belajar dari kalimat
 //   weights(intent,feature,w)      bobot intent 0..1; baris baru HANYA muncul lewat :good / :bad / :fix (default tidak disimpan)
-//   sense_weights(key,feature,w)   bobot pemilihan arti kata ambigu (bilangan bulat); lewat :sense <kata> <kelas>
+//   sense_weights(word_id,pos,feature_id,w)  bobot pemilihan arti kata (semua nomor); lewat :sense <kata> <kelas>
+//   enum_names(kind,id,name)       nama untuk nomor; kind 1 = fitur, 2 = kelas kata
 //   tool_word(tool_id,word_id,role,pos,trans) kosakata milik tool; tool awal (math) diisi dari seed.ts sekali saja
 //
 // Kode per kelompok tugas ada di store/ (fungsi yang menerima `sql`); kelas ini hanya meneruskan.
 import { SQL } from "bun";
-import type { Features, WordRecord } from "./types";
+import type { Features, Pos, Poses, WordRecord } from "./types";
 import type { CtxRow } from "./context";
 import type { EnvItem } from "./env";
 import type { Tool } from "./tools";
@@ -26,20 +27,28 @@ import * as fb from "./store/feedback";
 import * as words from "./store/words";
 import * as feat from "./store/word-features";
 import * as train from "./store/weights";
+import * as sense from "./store/sense";
+import type { SenseRow } from "./attention";
 import * as tools from "./store/tools";
 import * as env from "./store/env";
 
 export type { Stats, FeedbackExport } from "./store/feedback";
 
 export class Store {
-  private constructor(private sql: SQL) {}
-
+  public poses: Poses = undefined as never;
+  private constructor(public sql: SQL) {}
+  
   /** url contoh: "sqlite://rlhf.db" atau "sqlite://:memory:" */
   static async open(url = "sqlite://data/ndm.db"): Promise<Store> {
     const sql = new SQL(url);
     await createSchema(sql);
     await seedTools(sql);
-    return new Store(sql);
+    const store = new Store(sql);
+
+    let poses = await store.sql`SELECT id,name FROM enum_names WHERE kind = 2`;
+    store.poses = poses.reduce((map: any, row: any) => (map[row.name] = row.id, map), {})
+
+    return store;
   }
 
   // interaksi dan feedback
@@ -63,9 +72,9 @@ export class Store {
   loadWeights() { return train.loadWeights(this.sql); }
   saveWeights(rows: Array<{ intent: string; feature: string; w: number }>) { return train.saveWeights(this.sql, rows); }
   resetWeights() { return train.resetWeights(this.sql); }
-  loadSenseWeights() { return train.loadSenseWeights(this.sql); }
-  saveSenseWeights(rows: Array<{ key: string; feature: string; w: number }>) { return train.saveSenseWeights(this.sql, rows); }
-  resetSenseWeights() { return train.resetSenseWeights(this.sql); }
+  loadSenseWeights() { return sense.loadSenseWeights(this.sql); }
+  saveSenseWeights(rows: SenseRow[]) { return sense.saveSenseWeights(this.sql, rows); }
+  resetSenseWeights() { return sense.resetSenseWeights(this.sql); }
 
   // tool dan harness
   saveTool(t: Tool) { return tools.saveTool(this.sql, t); }

@@ -1,5 +1,5 @@
 import { LEX, transFor } from "./lexicon";
-import { Morph, Pos, Trans, Voice } from "./types";
+import { Morph, Pos, Poses, Trans, Voice } from "./types";
 
 const isVerb = (w: string) => !!LEX.get(w)?.poss.includes("verb");
 
@@ -66,8 +66,8 @@ export function analyze(w: string): Morph | null {
   return null;
 }
 
-export function guessPos(w: string): Pos {
-  if (/^\d+(\.\d+)*$/.test(w)) return "num";
-  if (/^(me|di|ber)\w{3,}/.test(w)) return "verb"; // tebakan dari afiks
-  return "unknown";
+export function guessPos(w: string, poses: Poses): number {
+  if (/^\d+(\.\d+)*$/.test(w)) return poses.num;
+  if (/^(me|di|ber)\w{3,}/.test(w)) return poses.verb; // tebakan dari afiks
+  return poses.unknown;
 }

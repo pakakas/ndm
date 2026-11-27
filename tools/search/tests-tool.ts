@@ -1,8 +1,9 @@
 // Tool "search" di mekanisme tool milik proyek (tools.ts + respond.ts).
 import { SEARCH_TOOL } from "./tool";
-import { setTools, runTools, asyncJob, registerHandler } from "../tools";
-import { unknownWord, respond } from "../respond";
+import { setTools, runTools, asyncJob, registerHandler } from "../../src/tools";
+import { respond } from "../../src/respond";
 import { ok, calls, fake, ddgOk, wikiId } from "./tests-util";
+import { unknownWord } from "../../src/unknown";
 
 ok("tool: bentuk", SEARCH_TOOL.name === "search" && SEARCH_TOOL.verbs.join() === "cari,google" && !!SEARCH_TOOL.description);
 

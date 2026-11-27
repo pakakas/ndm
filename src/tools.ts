@@ -22,6 +22,10 @@ export interface AsyncHandler { ack: (raw: string) => string | null; run: (raw: 
 const ASYNC = new Map<string, AsyncHandler>();
 export const registerAsyncHandler = (name: string, h: AsyncHandler): void => { ASYNC.set(name, h); };
 
+export function getHandler(name: string): any {
+  return HANDLERS.get(name) ?? null;
+}
+
 let TOOLS: Tool[] = [];
 const ROLES = new Map<string, Map<string, string>>();
 

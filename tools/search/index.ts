@@ -4,14 +4,16 @@ import type { Fetch } from "./http";
 import { ddgSearch } from "./ddg";
 import { wikiSearch } from "./wikipedia";
 import { truncate } from "./text";
+import { bingSearch } from "./bing";
 
 export type { SearchHit, SearchResult } from "./types";
 export { parseSearch } from "./query";
 
 type Name = "duckduckgo" | "wikipedia";
 const PROVIDERS: Record<Name, (q: string, n: number, f: Fetch) => Promise<SearchHit[]>> = {
-  duckduckgo: ddgSearch,
-  wikipedia: wikiSearch,
+  bing: bingSearch
+  // duckduckgo: ddgSearch,
+  // wikipedia: wikiSearch,
 };
 
 export interface SearchOptions { fetch?: Fetch; provider?: string; limit?: number }
@@ -21,7 +23,7 @@ export async function search(query: string, opts: SearchOptions = {}): Promise<S
   const f = opts.fetch ?? fetch;
   const limit = opts.limit ?? 5;
   const want = opts.provider ?? process.env.SEARCH_PROVIDER ?? "auto";
-  const order: Name[] = want === "duckduckgo" || want === "wikipedia" ? [want] : ["duckduckgo", "wikipedia"];
+  const order: Name[] = want === "duckduckgo" || want === "wikipedia" ? [want] : ["duckduckgo", "wikipedia", "bing"];
   const errors: string[] = [];
   let answeredEmpty = false;
   for (const name of order) {

@@ -4,8 +4,8 @@ import type { WeightChange } from "../src";
 import type { Features, Tok } from "../src/types";
 import { FEATURE_KEYS } from "./help";
 
-export function showDebug(input: string): void {
-  const { f, toks, trace } = analyzeText(input);
+export function showDebug(toks: Tok[], f: Features, trace: any): void {
+  // const { f, toks, trace } = analyzeText(input);
   console.log("  fitur :", JSON.stringify({ ...f, intent: INTENT_NAME[f.intent] }));
   console.log(
     "  skor  :",

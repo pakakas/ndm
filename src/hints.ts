@@ -5,7 +5,7 @@ import { guess } from "./context";
 import { knownWords, learnedEntries } from "./lexicon";
 import { CLASSES, CUE_G } from "./learning";
 import { tag, tokenize } from "./tokenizer";
-import { Features, Pos, Tok, INTENT_NAME } from "./types";
+import { Features, Pos, Tok, INTENT_NAME, Poses } from "./types";
 
 const LABEL = new Map(CLASSES.map((c) => [c.pos, c.label]));
 
@@ -79,10 +79,10 @@ function affixHint(w: string): string | null {
 }
 
 /** Hint saat bot tidak mengenal sebuah kata. */
-export function unknownHints(raw: string, word: string): string[] {
+export function unknownHints(raw: string, word: string, poses: Poses): string[] {
   const out: string[] = [];
   const w = word.toLowerCase();
-  const { toks } = analyzeText(raw);
+  const { toks } = analyzeText(raw, poses);
 
   const pos = positionHint(toks, toks.findIndex((t) => t.text === w));
   if (pos) out.push(pos.text);
@@ -111,9 +111,9 @@ export function unknownHints(raw: string, word: string): string[] {
 }
 
 /** Hint saat penjelasan pengguna tidak bisa dipahami. */
-export function failedExplanationHints(word: string, text: string): string[] {
+export function failedExplanationHints(word: string, text: string, poses: Poses): string[] {
   const w = word.toLowerCase();
-  const unknown = [...new Set(tag(tokenize(text.replace(CUE_G, " "))).filter((t) => !t.known && t.text !== w).map((t) => t.text))];
+  const unknown = [...new Set(tag(tokenize(text.replace(CUE_G, " ")), poses).filter((t) => !t.known && t.text !== w).map((t) => t.text))];
   const out: string[] = [];
   if (unknown.length)
     out.push(

@@ -1,5 +1,5 @@
 // Menghubungkan pencarian ke mekanisme tool: aktif hanya kalau tool "search" ada di tabel tools.
-import { registerAsyncHandler } from "../tools";
+import { registerAsyncHandler } from "../../src/tools";
 import { parseSearch, search, formatHits } from "./index";
 
 registerAsyncHandler("search", {

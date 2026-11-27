@@ -2,7 +2,7 @@
 import { entryOf, isBuiltin, isLearned, describe, transFor, idOf, wordOf, analyze, parseEdit, analyzeText, featureDiff } from "../src";
 import { isExternal } from "../src/lexicon";
 import type { Session } from "./session";
-import { converse, teach } from "./converse";
+import { converse } from "./converse";
 import { printHints } from "./format";
 
 export function kata(_s: Session, rest: string[]): void {
@@ -32,7 +32,7 @@ export async function edit(s: Session, rest: string[]): Promise<void> {
   const { learned, error } = parseEdit(w0, kv);
   if (error || !learned) { console.log(error); return; }
   const before = s.lastInput ? analyzeText(s.lastInput).f : null;
-  await teach(s, learned, `edit manual: ${kv.join(" ")}`);
+  // await teach(s, learned, `edit manual: ${kv.join(" ")}`);
   console.log(`"${learned.word}" sekarang: ${describe(learned)}.`);
   if (s.rlhf && before) printHints([`Efek pada "${s.lastInput}": ${featureDiff(before, analyzeText(s.lastInput).f)}`]);
   if (s.pending?.word === learned.word) {

@@ -10,9 +10,9 @@
 // Kata fungsi (berapa, tolong, bisa, dan, ...) diabaikan; daftarnya diambil dari kelas kata di leksikon.
 // Ketat: kalau soal berangka memuat kata isi yang tidak dikenal, calc() mengembalikan null supaya
 // kalimat biasa ("kirim 3 file") tetap lewat jalur lama. Desimal pakai titik; koma = pemisah daftar.
-import { isFunctionWord } from "./lexicon";
-import { registerHandler, roleOf } from "./tools";
-import { analyze } from "./morphology";
+import { isFunctionWord } from "../src/lexicon";
+import { registerHandler, roleOf } from "../src/tools";
+import { analyze } from "../src/morphology";
 
 type Agg = "sum" | "avg" | "max" | "min" | "sort";
 type Dir = "asc" | "desc";

@@ -6,13 +6,15 @@ import { loadWeights as loadSenseWeights } from "../src/attention";
 import { setEnv, loadHarness } from "../src/env";
 import { applyToolWords } from "../src/lexicon";
 import { setTools } from "../src/tools";
-import { SEARCH_TOOL } from "../src/search/tool";
+import { SEARCH_TOOL } from "../tools/search/tool";
 import type { Session } from "./session";
 import { handle } from "./handle";
+import { registerLearnWord } from "../tools/learn-word";
 
 export async function startRepl(rlhf: boolean, debug: boolean): Promise<void> {
-  const store = await Store.open(process.env.RLHF_DB ?? "sqlite://data/ndm.db");
+  const store = await Store.open();
 
+  await registerLearnWord(store);
   loadWeights(await store.loadWeights());
   loadSenseWeights(await store.loadSenseWeights());
   const tools = await store.loadTools();

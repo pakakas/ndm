@@ -1,15 +1,17 @@
-// Jalankan: bun main.ts                  (REPL + penyimpanan feedback)
+// Jalankan: bun main.ts                  (REPL)
 //           bun main.ts --rlhf           (REPL + hint untuk pemberi penjelasan)
 //           bun main.ts repl             (sama)
 //           bun main.ts "kirim laporan"  (sekali jalan, tanpa DB)
-// Env: RLHF_DB=sqlite://rlhf.db (default)
 // Kode REPL ada di cli/ (satu file per kelompok perintah).
-import { respond, unknownWord, unknownHints } from "./src";
+import { unknownHints } from "./src";
+import { infer } from "./src/infer";
+import { train } from "./src/train";
 import { setEnv, loadHarness } from "./src/env";
 import { setTools, asyncJob } from "./src/tools";
-import { SEARCH_TOOL } from "./src/search/tool";
-import { showDebug, printHints } from "./cli/format";
+import { SEARCH_TOOL } from "./tools/search/tool";
+import { printHints } from "./cli/format";
 import { startRepl } from "./cli/repl";
+import { unknownWord } from "./src/unknown";
 
 const rlhfFlag = process.argv.includes("--rlhf");
 const debugFlag = process.argv.includes("--debug");
@@ -18,14 +20,22 @@ const args = process.argv.slice(2).filter((a) => a !== "start" && a !== "repl"
   && a !== "--debug"
 );
 
+function formatReply(tokensOut: string[]): string {
+  if (tokensOut.length === 0) return "";
+  const thinkEnd = tokensOut.indexOf("</think>\n");
+  return thinkEnd !== -1
+    ? tokensOut.slice(thinkEnd + 1).filter(t => t !== "\\n").join(" ")
+    : tokensOut.filter(t => t !== "<think>" && t !== "\\n").join(" ");
+}
+
 if (args.length > 0) {
+  await train();
   setEnv(loadHarness().items);
   setTools([SEARCH_TOOL]); // sekali jalan tidak memuat DB: pasang tool pencarian langsung
   const input = args.join(" ");
-  console.log(respond(input));
+  console.log(formatReply(infer(input, debugFlag)));
   const job = asyncJob(input);
   if (job) console.log(await job.run());
-  showDebug(input);
   const uw = unknownWord(input);
   if (rlhfFlag && uw) printHints(unknownHints(input, uw));
 } else {

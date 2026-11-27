@@ -11,6 +11,7 @@ export async function getText(url: string, fetchFn: Fetch = fetch, timeoutMs = 8
     res = await fetchFn(url, {
       headers: { "user-agent": UA, accept: "text/html,application/json;q=0.9" },
       signal: AbortSignal.timeout(timeoutMs),
+      redirect: 'follow',
     });
   } catch (e) {
     const name = (e as Error).name;

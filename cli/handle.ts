@@ -1,11 +1,12 @@
 // Satu baris input: perintah ":..." dikirim ke penangannya, selain itu jadi percakapan.
 import type { Session } from "./session";
 import { HELP } from "./help";
-import { converse, explain } from "./converse";
+import { converse } from "./converse";
 import { kata, edit, idCmd } from "./cmd-words";
 import { kelas, learned, forgetCmd, konteks } from "./cmd-learn";
 import { weights, reset, stats, exportTests, rate } from "./cmd-feedback";
 import { sense, env } from "./cmd-sense";
+import { train } from "../src/train";
 import { looksLikeExplanation } from "../src";
 import { runTools } from "../src/tools";
 import { Plan, isNo, isYes, settle } from "../src/confirm";
@@ -19,11 +20,16 @@ const COMMANDS: Record<string, Cmd> = {
   ":help": () => console.log(HELP),
   ":rlhf": (s) => { s.rlhf = !s.rlhf; console.log(`mode rlhf ${s.rlhf ? "aktif" : "nonaktif"}`); },
   ":debug": (s) => { s.debug = !s.debug; console.log(`debug ${s.debug ? "aktif" : "nonaktif"}`); },
+  ":think": (s) => { (s as any).think = !(s as any).think; console.log(`think ${(s as any).think ? "aktif" : "nonaktif"}`); },
   ":kata": kata, ":edit": edit, ":id": idCmd,
   ":kelas": kelas, ":learned": learned, ":forget": forgetCmd, ":konteks": konteks,
   ":weights": weights, ":reset": reset, ":stats": stats, ":export": exportTests,
   ":good": rate, ":bad": rate, ":fix": rate,
   ":sense": sense, ":env": env,
+  ":train": async (_s, rest) => {
+    const epochs = Number(rest[0]) > 0 ? Math.floor(Number(rest[0])) : 1000;
+    await train(epochs);
+  },
 };
 
 export async function handle(s: Session, line: string): Promise<void> {
@@ -47,6 +53,6 @@ export async function handle(s: Session, line: string): Promise<void> {
 
   // Pesan yang ditangani tool (mis. "cari kucing lucu") menggantikan kata asing yang menunggu penjelasan,
   // kecuali pesan itu memang berbentuk penjelasan ("blorb artinya cari barang").
-  if (s.pending && (looksLikeExplanation(text, s.pending.word) || !runTools(text))) return explain(s, text);
+  // if (s.pending && (looksLikeExplanation(text, s.pending.word) || !runTools(text))) return explain(s, text);
   return converse(s, text);
 }

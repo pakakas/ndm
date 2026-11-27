@@ -2,10 +2,11 @@ import { calc } from "./math";
 import { learn, forget } from "./lexicon";
 import { parseExplanation } from "./learning";
 import { parseEdit } from "./wordedit";
-import { respond, unknownWord } from "./respond";
+import { respond } from "./respond";
 import { Store } from "./store";
 import { applyMathSeed, isBuiltin } from "./lexicon";
 import { MATH_SEED } from "./seed";
+import { unknownWord } from "../src/unknown";
 
 let fail = 0;
 const ok = (name: string, got: unknown, want: unknown) => {

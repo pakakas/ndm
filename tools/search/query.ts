@@ -4,7 +4,7 @@
 //   "googling resep nasi goreng"          -> resep nasi goreng
 // "cari" tanpa penanda internet hanya dianggap pencarian web kalau kata pertama kuerinya TIDAK dikenal
 // (nama atau topik). "cari file laporan" tetap urusan bot lokal; tambahkan "di internet" untuk memaksa web.
-import { analyze } from "../morphology";
+import { analyze } from "../../src/morphology";
 
 const CARI = /^(?:men)?cari(?:in|kan|lah)?$/;
 const WEB_VERBS = new Set(["google", "googling", "telusuri", "search"]);

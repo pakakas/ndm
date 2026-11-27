@@ -11,7 +11,7 @@ export async function createLexiconTables(sql: SQL): Promise<void> {
   await sql`
     CREATE TABLE IF NOT EXISTS word_pos (
       word_id INTEGER NOT NULL REFERENCES words(id),
-      pos TEXT NOT NULL,
+      pos INTEGER NOT NULL,
       rank INTEGER NOT NULL DEFAULT 0,
       PRIMARY KEY (word_id, pos)
     )`;

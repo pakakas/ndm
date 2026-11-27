@@ -44,7 +44,7 @@ export function mk(
 }
 
 /** Transitivitas kata untuk kelas tertentu (hanya bermakna untuk kata kerja). */
-export function transFor(e: Entry, pos: Pos): Trans {
+export function transFor(e: Entry, pos: number): Trans {
   if (pos !== "verb") return "none";
   return e.transitive ? "trans" : e.intransitive ? "intrans" : "none";
 }
@@ -59,22 +59,22 @@ function add(pos: Pos, words: string, trans?: Trans): void {
   }
 }
 
-add("interj", "halo hai hei hi selamat pagi siang sore malam terimakasih permisi");
-add("pron", "saya aku kamu anda dia kami kita mereka kalian");
-add("qword", "apa siapa mengapa kenapa bagaimana kapan dimana berapa apakah mana");
-add("conj", "dan lalu kemudian atau terus lantas serta");
-add("prep", "di ke dari pada untuk dengan");
-add("aux", "bisa dapat mau akan sedang sudah belum tidak bukan jangan");
-add("det", "yang itu ini");
-add("polite", "tolong mohon coba");
-add("adv", "sekarang nanti kemarin besok lagi saja ya iya");
-add("adj", "baru lama besar kecil baik");
-add("noun", "file laporan dokumen folder buku email pesan error kabar nama hari data gambar");
-add("verb", "kirim tulis hapus buka baca simpan cari tutup ambil lihat ubah salin pindah cetak bantu", "trans");
-add("verb", "pergi jalan tidur datang pulang", "intrans");
-// Kata dengan lebih dari satu fitur (kelas pertama = utama):
-add("verb", "pesan", "trans");   // pesan: kata benda, juga kata kerja ("pesan tiket")
-add("noun", "jalan tutup");      // jalan: kata kerja, juga kata benda; tutup: kata kerja, juga kata benda
+// add("interj", "halo hai hei hi selamat pagi siang sore malam terimakasih permisi");
+// add("pron", "saya aku kamu anda dia kami kita mereka kalian");
+// add("qword", "apa siapa mengapa kenapa bagaimana kapan dimana berapa apakah mana");
+// add("conj", "dan lalu kemudian atau terus lantas serta");
+// add("prep", "di ke dari pada untuk dengan");
+// add("aux", "bisa dapat mau akan sedang sudah belum tidak bukan jangan");
+// add("det", "yang itu ini");
+// add("polite", "tolong mohon coba");
+// add("adv", "sekarang nanti kemarin besok lagi saja ya iya");
+// add("adj", "baru lama besar kecil baik");
+// add("noun", "file laporan dokumen folder buku email pesan error kabar nama hari data gambar");
+// add("verb", "kirim tulis hapus buka baca simpan cari tutup ambil lihat ubah salin pindah cetak bantu", "trans");
+// add("verb", "pergi jalan tidur datang pulang", "intrans");
+// // Kata dengan lebih dari satu fitur (kelas pertama = utama):
+// add("verb", "pesan", "trans");   // pesan: kata benda, juga kata kerja ("pesan tiket")
+// add("noun", "jalan tutup");      // jalan: kata kerja, juga kata benda; tutup: kata kerja, juga kata benda
 
 export const EN_WORDS = new Set(
   "the a an is are was what how please send open delete read write hello hi can you me my this that and or to of in for".split(" ")

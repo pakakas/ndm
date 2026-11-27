@@ -1,6 +1,6 @@
 export * from "./types";
 export { analyzeText } from "./features";
-export { respond, unknownWord, unknownGuess } from "./respond";
+export { respond } from "./respond";
 export { parseExplanation, looksLikeExplanation, describe, kelasList, CLASSES } from "./learning";
 export { learn, restore, forget, entryOf, isBuiltin, isLearned, learnedEntries, assignIds, builtinForms, idOf, wordOf, toRecord, transFor } from "./lexicon";
 export { observe, guess, pickPos, loadContext, resetContext, contextRows } from "./context";
@@ -10,7 +10,6 @@ export { tokenize, tag } from "./tokenizer";
 export { analyze } from "./morphology";
 export { INTENTS, FEATURES, DEFAULT_WEIGHTS, classify, train, nudge, getWeights, loadWeights, resetWeights } from "./intent";
 export type { WeightChange, IntentTrace, FeatureVec } from "./intent";
-export { calc } from "./math";
 export { capability } from "./capability";
 export type { Tool } from "./capability";
 export * from "./tools";

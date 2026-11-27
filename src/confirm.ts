@@ -3,7 +3,7 @@ import { analyzeText } from "./features";
 import { analyze } from "./morphology";
 import { getTools, runTools } from "./tools";
 import type { Tool } from "./tools";
-import { Intent } from "./types";
+import { Intent, Poses } from "./types";
 
 export interface Plan { verb: string; obj?: string }
 
@@ -11,9 +11,9 @@ export const isYes = (t: string): boolean => /^(ya|y|iya|ok|oke|lanjut|benar|bet
 export const isNo = (t: string): boolean => /^(tidak|t|n|no|nggak|gak|jangan|batal)$/i.test(t.trim());
 
 /** Rencana yang ditanyakan "Lanjutkan?" untuk pesan ini, atau null kalau bot tidak bertanya begitu. */
-export function planOf(raw: string): Plan | null {
+export function planOf(raw: string, poses: Poses): Plan | null {
   if (runTools(raw)) return null;
-  const { f, toks } = analyzeText(raw);
+  const { f, toks } = analyzeText(raw, poses);
   if (f.intent !== Intent.Request) return null;
   const vi = toks.findIndex((t) => t.pos === "verb");
   if (vi < 0) return null;

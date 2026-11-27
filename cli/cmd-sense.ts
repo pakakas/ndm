@@ -31,8 +31,9 @@ export async function sense(s: Session, rest: string[]): Promise<void> {
   if (!hit) { console.log(`"${w}" tidak ambigu di kalimat terakhir.`); return; }
   const [t, i] = hit;
   if (!t.alts.includes(p)) { console.log(`"${w}" hanya punya kelas: ${t.alts.join(", ")}.`); return; }
-  const r = trainSense(w, t.alts, senseFeatures(toks, i), p);
-  if (r.changes.length) await s.store.saveSenseWeights(r.changes.map((c) => ({ key: c.key, feature: c.feature, w: c.to })));
+  if (!t.id) { console.log(`"${w}" belum punya token id, tidak bisa dilatih.`); return; }
+  const r = trainSense(t.id, t.alts, senseFeatures(toks, i), p);
+  if (r.changes.length) await s.store.saveSenseWeights(r.changes.map((c) => ({ wordId: c.wordId, pos: c.pos, feature: c.feature, w: c.to })));
   console.log(
     r.flipped
       ? `"${w}" sekarang dibaca ${p} (${r.steps} langkah, ${r.changes.length} bobot berubah).`

@@ -2,7 +2,7 @@ import { EN_WORDS } from "./lexicon";
 import { tokenize, tag } from "./tokenizer";
 import { segments, verbIdx, hasVerb, hasSubject, hasObject, bucket } from "./clauses";
 import { classify, FeatureVec, IntentTrace } from "./intent";
-import { Features, Language, SentenceType, Tok } from "./types";
+import { Features, Language, Poses, SentenceType, Tok } from "./types";
 
 const ERROR_RE = /traceback|exception|error:|\bat line \d+|stack ?trace/i;
 const CODE_RE = /[{};]\s*$|=>|\bfunction\b|\bconst\b|\bdef\b|\bimport\b.+\bfrom\b/m;
@@ -21,8 +21,7 @@ function detectLanguage(toks: Tok[]): Language {
 
 const b = (v: boolean): 0 | 1 => (v ? 1 : 0);
 
-export function analyzeText(raw: string): { f: Features; toks: Tok[]; trace: IntentTrace } {
-  const toks = tag(tokenize(raw));
+export function featuresFromToks(toks: Tok[], raw: string): Features {
   const segs = segments(toks);
   const vsegs = segs.filter(hasVerb);
   const words = toks.filter((t) => t.pos !== "punct");
@@ -46,10 +45,25 @@ export function analyzeText(raw: string): { f: Features; toks: Tok[]; trace: Int
     });
   }
 
-  // Fitur bernama untuk klasifikasi intent: semuanya biner dan dihitung deterministik.
+  return {
+    language: detectLanguage(toks),
+    sentence_type,
+    sentence_count: bucket(vsegs.length),
+    clause_count: bucket(vsegs.length),
+    subject_omitted,
+    split_actions,
+    object_shared,
+  };
+}
+
+export function analyzeText(raw: string, poses: Poses): { f: Features; toks: Tok[]; trace: IntentTrace } {
+  const toks = tag(tokenize(raw), poses);
+  const f = featuresFromToks(toks, raw);
+  const words = toks.filter((t) => t.pos !== "punct");
   const normalized = words.map((t) => t.text).join(" ");
-  const verb = vsegs.length > 0;
+  const verb = toks.some((t) => t.pos === "verb");
   const ability = verb && toks.some((t) => t.pos === "aux" && (t.lemma === "bisa" || t.lemma === "dapat"));
+
   const x: FeatureVec = {
     bias: 1,
     has_error_pattern: b(ERROR_RE.test(raw)),
@@ -57,31 +71,22 @@ export function analyzeText(raw: string): { f: Features; toks: Tok[]; trace: Int
     all_interj: b(words.length > 0 && words.every((t) => t.pos === "interj")),
     smalltalk_phrase: b(/^(apa|bagaimana) kabar\b/.test(normalized)),
     polite_and_verb: b(verb && toks.some((t) => t.pos === "polite")),
-    ability_no_subject:   b(ability && subject_omitted === true),
-    ability_with_subject: b(ability && subject_omitted === false),
+    ability_no_subject: b(ability && f.subject_omitted === true),
+    ability_with_subject: b(ability && f.subject_omitted === false),
     has_qword: b(toks.some((t) => t.pos === "qword")),
     has_question_mark: b(raw.includes("?")),
     has_verb: b(verb),
-    imperative_form: b(sentence_type === "imperative"),
-    subject_omitted: b(subject_omitted === true),
-    has_subject: b(verb && subject_omitted === false),
+    imperative_form: b(f.sentence_type === "imperative"),
+    subject_omitted: b(f.subject_omitted === true),
+    has_subject: b(verb && f.subject_omitted === false),
     passive_voice: b(toks.some((t) => t.pos === "verb" && t.voice === "passive")),
-    multi_action: b(split_actions === true),
-    is_fragment: b(sentence_type === "fragment"),
+    multi_action: b(f.split_actions === true),
+    is_fragment: b(f.sentence_type === "fragment"),
     has_unknown: b(toks.some((t) => t.pos === "unknown")),
     asks_definition: b(/^(apa (itu|arti|artinya|maksud)|arti|maksud)\b|\b(itu apa|artinya apa|berarti apa)$/.test(normalized)),
   };
-  const trace = classify(x);
 
-  const f: Features = {
-    language: detectLanguage(toks),
-    intent: trace.winner,
-    sentence_count: bucket(vsegs.length),
-    sentence_type,
-    clause_count: bucket(vsegs.length),
-    subject_omitted,
-    split_actions,
-    object_shared,
-  };
+  const trace = classify(x);
+  f.intent = trace.winner;  // ← set intent ke Features
   return { f, toks, trace };
 }

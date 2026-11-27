@@ -4,6 +4,7 @@ export type Pos =
 export type Trans = "none" | "intrans" | "trans";
 export type Voice = "active" | "passive" | "base";
 export type Bucket = "one" | "two" | "three_or_more";
+export type Poses = Record<Pos, number>;
 
 /**
  * Satu kata di leksikon. `id` = token id (stabil, sama dengan words.id di database).
@@ -43,7 +44,7 @@ export interface Morph {
   voice?: Voice;
 }
 export interface Tok {
-  text: string; lemma: string; pos: Pos; sense?: Record<string, number>;
+  text: string; lemma: string; pos: number; sense?: Record<string, number>;
   id: number; lemmaId: number; alts: Pos[];
   trans: Trans; voice?: Voice; known: boolean; repeat: number;
 }

@@ -1,6 +1,7 @@
 // Skema database. Tabel leksikon dan tool ada di file sendiri (schema-lexicon, schema-tools).
 import type { SQL } from "bun";
 import { createLexiconTables } from "./schema-lexicon";
+import { createSenseTables } from "./schema-sense";
 import { createToolTables } from "./schema-tools";
 
 export async function createSchema(sql: SQL): Promise<void> {
@@ -38,14 +39,7 @@ export async function createSchema(sql: SQL): Promise<void> {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (intent, feature)
     )`;
-  await sql`
-    CREATE TABLE IF NOT EXISTS sense_weights (
-      key TEXT NOT NULL,
-      feature TEXT NOT NULL,
-      w INTEGER NOT NULL,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      PRIMARY KEY (key, feature)
-    )`;
+  await createSenseTables(sql);
   await createToolTables(sql);
 
   await sql`CREATE INDEX IF NOT EXISTS idx_feedback_interaction ON feedback(interaction_id)`;
