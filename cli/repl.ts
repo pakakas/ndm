@@ -11,7 +11,7 @@ import type { Session } from "./session";
 import { handle } from "./handle";
 import { registerLearnWord } from "../tools/learn-word";
 
-export async function startRepl(rlhf: boolean, debug: boolean): Promise<void> {
+export async function startRepl(rlhf: boolean, debug: boolean, think = false): Promise<void> {
   const store = await Store.open();
 
   await registerLearnWord(store);
@@ -35,10 +35,12 @@ export async function startRepl(rlhf: boolean, debug: boolean): Promise<void> {
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: "kamu> " });
   const s: Session = { store, rl, debug, rlhf, lastId: null, lastInput: "", pending: null, confirm: null };
+  (s as any).think = think;
 
   console.log("Chatbot simbolik. Ketik :help untuk bantuan.");
   if (s.rlhf) console.log("Mode RLHF aktif: bot akan memberi hint saat meminta penjelasan.");
   if (s.debug) console.log("Mode debug aktif");
+  if (think) console.log("Mode think aktif");
   console.log("");
   rl.prompt();
 

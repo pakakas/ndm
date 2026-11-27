@@ -2,15 +2,64 @@ import { MAX_LEN, predictNext, tokens, train } from "./train";
 
 const THINK_TOKENS = new Set(["is", "greeting", "asking", "for", "capability", ","]);
 
-export function* inferStream(startText: string, verbose = false): Generator<string> {
+/** Regex pattern → placeholder token di vocabs (nilai asli tidak masuk weights). */
+export const PATTERNS: Array<[RegExp, string]> = [
+  [/^\d+\.\d+\.\d+\.\d+$/, "<IP>"],
+  [/^\d+$/, "<NUM>"],
+];
+
+/**
+ * Resolusi token secara rekursif lewat runtimeCtx (misal "47" -> "192.168.52.47"),
+ * lalu cocokkan ke vocab langsung atau PATTERNS regex.
+ */
+export function resolveRuntimeToken(
+  word: string,
+  runtimeCtx?: Record<string, string>,
+  visited = new Set<string>(),
+): { tokenId: number; placeholder?: string; rawValue: string } | undefined {
+  if (visited.has(word)) return undefined;
+  visited.add(word);
+
+  if (runtimeCtx && Object.hasOwn(runtimeCtx, word)) {
+    const next = resolveRuntimeToken(runtimeCtx[word], runtimeCtx, visited);
+    if (next) return next;
+  }
+
+  const directId = tokens.get(word);
+  if (directId !== undefined) return { tokenId: directId, rawValue: word };
+
+  for (const [regex, placeholder] of PATTERNS) {
+    if (regex.test(word)) {
+      const phId = tokens.get(placeholder);
+      if (phId !== undefined) return { tokenId: phId, placeholder, rawValue: word };
+    }
+  }
+
+  const unkId = tokens.get("unknown");
+  if (unkId !== undefined) return { tokenId: unkId, placeholder: "unknown", rawValue: word };
+  return undefined;
+}
+
+export function* inferStream(
+  startText: string,
+  verbose = false,
+  runtimeCtx?: Record<string, string>,
+): Generator<string> {
   const words = startText
-    .replace(/([?!.,;:])/g, " $1 ")
+    .replace(/([?!,;:])/g, " $1 ")
+    .replace(/(?<!\d)\.(?!\d)/g, " . ")
     .split(/\s+/)
     .filter(Boolean);
 
-  const tokenIds = words
-    .map(w => tokens.get(w))
-    .filter((id): id is number => id !== undefined);
+  const bindings = new Map<string, string>();
+  const tokenIds: number[] = [];
+  for (const w of words) {
+    const res = resolveRuntimeToken(w, runtimeCtx);
+    if (res) {
+      tokenIds.push(res.tokenId);
+      if (res.placeholder) bindings.set(res.placeholder, res.rawValue);
+    }
+  }
 
   if (tokenIds.length === 0) {
     if (verbose) console.log(`[infer] skip: no known tokens for "${startText}"`);
@@ -31,27 +80,19 @@ export function* inferStream(startText: string, verbose = false): Generator<stri
   for (let i = 0; i < 40; i++) {
     const next = predictNext(tokenIds, verbose, recentCount, PENALTY);
     const word = tokens.getWord(next) ?? `?${next}`;
+    const outWord = bindings.get(word) ?? word;
 
     // Emit </think> saat ketemu ":" atau "say" — token delimiter tidak di-yield ke user
     if (!thinkEmitted && (word === "say" || word === ":")) {
       yield "</think>\n";
       thinkEmitted = true;
       tokenIds.push(next);
-      stepsSinceInput++;
       _updateRecent(recentCount, tokenIds, next, WINDOW);
       continue;
     }
 
-    // Jika model skip think-path langsung ke reply token (bukan think token):
-    // emit </think> sebelum token ini
-    if (!thinkEmitted && stepsSinceInput > 0 && !THINK_TOKENS.has(word) && word !== "\\n") {
-      yield "</think>\n";
-      thinkEmitted = true;
-    }
-
-    yield word;
+    yield outWord;
     tokenIds.push(next);
-    stepsSinceInput++;
     _updateRecent(recentCount, tokenIds, next, WINDOW);
 
     if (word === "\\n" || tokenIds.length >= MAX_LEN) break;
@@ -70,8 +111,8 @@ function _updateRecent(map: Map<number, number>, seq: number[], next: number, wi
   }
 }
 
-export function infer(startText: string, verbose = false): string[] {
-  return [...inferStream(startText, verbose)];
+export function infer(startText: string, verbose = false, runtimeCtx?: Record<string, string>): string[] {
+  return [...inferStream(startText, verbose, runtimeCtx)];
 }
 
 if (import.meta.main) {

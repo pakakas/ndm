@@ -1,5 +1,12 @@
 import { createReadStream, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline";
+import { roles } from "./role";
+import type { Pos } from "./types";
+
+const POSES: Pos[] = [
+  "noun", "verb", "adj", "adv", "pron", "prep", "conj", "interj",
+  "num", "aux", "det", "polite", "qword", "punct", "unknown",
+];
 
 export interface TokenMap {
   size: number;
@@ -9,9 +16,15 @@ export interface TokenMap {
   has(word: string): boolean;
 }
 
+const EXTRA_TOKENS = [
+  "indonesian", "english", "mixed", "other",
+  "error", "code", "smalltalk", "request", "question", "define",
+  "<IP>", "<NUM>",
+];
+
 export async function generateVocabs(datasetPath: string, vocabsPath: string): Promise<void> {
   const rl = createInterface({ input: createReadStream(datasetPath, { encoding: "utf8" }) });
-  const seen = new Set<string>();
+  const seen = new Set<string>([...Object.keys(roles), ...POSES, ...EXTRA_TOKENS]);
   for await (const line of rl) {
     const words = line
       .replace(/([?!.,;:])/g, " $1 ")

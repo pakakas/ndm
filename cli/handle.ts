@@ -30,6 +30,34 @@ const COMMANDS: Record<string, Cmd> = {
     const epochs = Number(rest[0]) > 0 ? Math.floor(Number(rest[0])) : 1000;
     await train(epochs);
   },
+  ":add-context": (s, rest) => {
+    if (rest.length < 2) {
+      console.log("Gunakan: :add-context <key> <value> (atau :add-context <key> is <value>)");
+      return;
+    }
+    const key = rest[0];
+    const value = rest[1] === "is" ? rest.slice(2).join(" ") : rest.slice(1).join(" ");
+    if (!value) {
+      console.log("Value tidak boleh kosong.");
+      return;
+    }
+    const ctx: Record<string, string> = ((s as any).runtimeCtx ??= {});
+    ctx[key] = value;
+    console.log(`[context] ${key} -> ${value}`);
+  },
+  ":clear-context": (s) => {
+    (s as any).runtimeCtx = {};
+    console.log("[context] cleared.");
+  },
+  ":context": (s) => {
+    const ctx = (s as any).runtimeCtx as Record<string, string> | undefined;
+    const entries = ctx ? Object.entries(ctx) : [];
+    if (entries.length === 0) {
+      console.log("[context] (kosong)");
+      return;
+    }
+    for (const [k, v] of entries) console.log(`  ${k} -> ${v}`);
+  },
 };
 
 export async function handle(s: Session, line: string): Promise<void> {

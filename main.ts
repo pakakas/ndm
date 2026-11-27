@@ -15,13 +15,16 @@ import { unknownWord } from "./src/unknown";
 
 const rlhfFlag = process.argv.includes("--rlhf");
 const debugFlag = process.argv.includes("--debug");
+const thinkFlag = process.argv.includes("--think");
 const args = process.argv.slice(2).filter((a) => a !== "start" && a !== "repl"
   && a !== "--rlhf"
   && a !== "--debug"
+  && a !== "--think"
 );
 
 function formatReply(tokensOut: string[]): string {
   if (tokensOut.length === 0) return "";
+  if (thinkFlag) return tokensOut.filter(t => t !== "\\n").join(" ");
   const thinkEnd = tokensOut.indexOf("</think>\n");
   return thinkEnd !== -1
     ? tokensOut.slice(thinkEnd + 1).filter(t => t !== "\\n").join(" ")
@@ -39,5 +42,5 @@ if (args.length > 0) {
   const uw = unknownWord(input);
   if (rlhfFlag && uw) printHints(unknownHints(input, uw));
 } else {
-  await startRepl(rlhfFlag, debugFlag);
+  await (startRepl as any)(rlhfFlag, debugFlag, thinkFlag);
 }

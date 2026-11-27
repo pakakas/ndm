@@ -12,7 +12,7 @@ await generateVocabs(datasetFile, tokensFile);
 const tokens = await loadVocabs(tokensFile);
 const vocabSize = tokens.size; // vocab size
 const MAX_LEN = 32;            // max sequence length
-const LR = 0.02;               // learning rate
+const LR = 0.01;               // learning rate (aman dengan gradient clipping)
 
 /** Dimensi dasar — fitur linguistik berlabel teks. */
 const baseDims = [
@@ -53,8 +53,10 @@ for (const line of readFileSync(datasetFile, "utf8").split(/\r?\n/)) {
 /** DIM_NAMES — hanya baseDims untuk label teks (index 0..31). */
 export const DIM_NAMES: string[] = [...baseDims];
 const embedDim = baseDims.length + BIT_DIMS.length; // e.g. 32 + 2 = 34
+const NUM_HEADS = 2;
+const HEAD_DIM  = Math.floor(embedDim / NUM_HEADS); // 17
 
-console.log(`[init] vocab=${vocabSize}, embedDim=${embedDim} (${baseDims.length} baseDims + ${BIT_DIMS.length} bitDims), MAX_LEN=${MAX_LEN}, LR=${LR}`);
+console.log(`[init] vocab=${vocabSize}, embedDim=${embedDim} (${baseDims.length} baseDims + ${BIT_DIMS.length} bitDims), heads=${NUM_HEADS}×${HEAD_DIM}, MAX_LEN=${MAX_LEN}, LR=${LR}`);
 console.log(`[init] BIT_DIMS: [${BIT_DIMS.map((m, i) => `dim${baseDims.length + i}=${m}n`).join(", ")}]`);
 
 /** TokenEmbed — flat number[], panjang = embedDim.
@@ -83,12 +85,15 @@ function randVector(size: number): number[] {
   return Array.from({ length: size }, () => 0);
 }
 
-// ─── Model params (Causal Self-Attention, no hidden state) ───
+// ─── Model params (Multi-Head Causal Self-Attention) ───
 const tokenEmbed: TokenEmbed[] = randEmbed(vocabSize);
 const posEmbed = randMatrix(MAX_LEN, embedDim);
-const queryWeight = randMatrix(embedDim, embedDim);
-const keyWeight = randMatrix(embedDim, embedDim);
-const valueWeight = randMatrix(embedDim, embedDim);
+// Tiap head punya Qh, Kh, Vh: [HEAD_DIM × embedDim]
+const queryWeights = Array.from({ length: NUM_HEADS }, () => randMatrix(HEAD_DIM, embedDim));
+const keyWeights   = Array.from({ length: NUM_HEADS }, () => randMatrix(HEAD_DIM, embedDim));
+const valueWeights = Array.from({ length: NUM_HEADS }, () => randMatrix(HEAD_DIM, embedDim));
+// Projection akhir W_O: concat semua head → embedDim
+const outputProjWeight = randMatrix(embedDim, embedDim); // W_O
 const outputWeight = randMatrix(vocabSize, embedDim);
 const outputBias = randVector(vocabSize);
 
@@ -136,7 +141,13 @@ export function ensureWord(word: string, copyFromWord?: string): number {
 }
 
 function calcTotalWeights(vSize: number): number {
-  return vSize * embedDim + MAX_LEN * embedDim + embedDim * embedDim * 3 + vSize * embedDim + vSize;
+  // tokenEmbed + posEmbed + (Qh+Kh+Vh)*NUM_HEADS + W_O + outputWeight + outputBias
+  return vSize * embedDim
+    + MAX_LEN * embedDim
+    + NUM_HEADS * 3 * embedDim * HEAD_DIM
+    + embedDim * embedDim
+    + vSize * embedDim
+    + vSize;
 }
 
 function loadSavedWeights(): void {
@@ -158,9 +169,12 @@ function loadSavedWeights(): void {
         for (let j = 0; j < dst[i].length; j++) dst[i][j] = floats[offset++];
     };
     readMat(posEmbed);
-    readMat(queryWeight);
-    readMat(keyWeight);
-    readMat(valueWeight);
+    for (let h = 0; h < NUM_HEADS; h++) {
+      readMat(queryWeights[h]);
+      readMat(keyWeights[h]);
+      readMat(valueWeights[h]);
+    }
+    readMat(outputProjWeight);
     readMat(outputWeight);
     for (let i = 0; i < outputBias.length; i++) outputBias[i] = floats[offset++];
     console.log(`[init] loaded ${floats.length} floats (${buf.byteLength} bytes) from ${weightsFileRelative}`);
@@ -182,59 +196,83 @@ function softmax(logits: number[]): number[] {
   return exps.map(expVal => expVal / expSum);
 }
 
-// ─── Forward pass over full sequence ───
+// ─── Forward pass over full sequence (Multi-Head) ───
 function forwardSequence(seq: number[]) {
   const seqLen = seq.length;
   const inputs = seq.map((tokenId, step) =>
     Array.from({ length: embedDim }, (_, dim) => tokenEmbed[tokenId][dim] + posEmbed[step][dim])
   );
-  const queries = inputs.map(inputVec => matVec(queryWeight, inputVec));
-  const keys = inputs.map(inputVec => matVec(keyWeight, inputVec));
-  const values = inputs.map(inputVec => matVec(valueWeight, inputVec));
 
-  const scale = Math.sqrt(embedDim);
-  const alphas: number[][] = [];
-  const ctx: number[][] = [];
-  const logits: number[][] = [];
+  const scale = Math.sqrt(HEAD_DIM);
+  const headQueries: number[][][] = [];
+  const headKeys: number[][][] = [];
+  const headValues: number[][][] = [];
+  const headAlphas: number[][][] = [];
+  const headCtx: number[][][] = [];
 
-  for (let step = 0; step < seqLen; step++) {
-    const scores: number[] = [];
-    for (let prevStep = 0; prevStep <= step; prevStep++) {
-      let dot = 0;
-      for (let dim = 0; dim < embedDim; dim++) {
-        dot += queries[step][dim] * keys[prevStep][dim];
+  for (let h = 0; h < NUM_HEADS; h++) {
+    const qh = inputs.map(v => matVec(queryWeights[h], v));
+    const kh = inputs.map(v => matVec(keyWeights[h], v));
+    const vh = inputs.map(v => matVec(valueWeights[h], v));
+    const alphasH: number[][] = [];
+    const ctxH: number[][] = [];
+
+    for (let step = 0; step < seqLen; step++) {
+      const scores: number[] = [];
+      for (let prevStep = 0; prevStep <= step; prevStep++) {
+        let dot = 0;
+        for (let d = 0; d < HEAD_DIM; d++) dot += qh[step][d] * kh[prevStep][d];
+        scores.push(dot / scale);
       }
-      scores.push(dot / scale);
-    }
-    const alpha = softmax(scores);
-    alphas.push(alpha);
+      const alpha = softmax(scores);
+      alphasH.push(alpha);
 
-    const contextVec = new Array(embedDim).fill(0);
-    for (let prevStep = 0; prevStep <= step; prevStep++) {
-      for (let dim = 0; dim < embedDim; dim++) {
-        contextVec[dim] += alpha[prevStep] * values[prevStep][dim];
+      const c = new Array(HEAD_DIM).fill(0);
+      for (let prevStep = 0; prevStep <= step; prevStep++) {
+        for (let d = 0; d < HEAD_DIM; d++) c[d] += alpha[prevStep] * vh[prevStep][d];
       }
+      ctxH.push(c);
     }
-    ctx.push(contextVec);
 
-    const stepLogits = matVec(outputWeight, contextVec).map((val, vocabIdx) => val + outputBias[vocabIdx]);
-    logits.push(stepLogits);
+    headQueries.push(qh);
+    headKeys.push(kh);
+    headValues.push(vh);
+    headAlphas.push(alphasH);
+    headCtx.push(ctxH);
   }
 
-  return { inputs, queries, keys, values, alphas, ctx, logits };
+  const concatCtx: number[][] = [];
+  const ctx: number[][] = [];
+  const logits: number[][] = [];
+  for (let step = 0; step < seqLen; step++) {
+    const cat: number[] = [];
+    for (let h = 0; h < NUM_HEADS; h++) cat.push(...headCtx[h][step]);
+    while (cat.length < embedDim) cat.push(0); // pad jika embedDim ganjil
+    concatCtx.push(cat);
+    const proj = matVec(outputProjWeight, cat);
+    ctx.push(proj);
+    logits.push(matVec(outputWeight, proj).map((val, vocabIdx) => val + outputBias[vocabIdx]));
+  }
+
+  return { inputs, headQueries, headKeys, headValues, headAlphas, alphas: headAlphas[0], concatCtx, ctx, logits };
 }
 
-// ─── Train one sequence (SGD) ───
+function clip(val: number, limit = 1.0): number {
+  if (!Number.isFinite(val)) return 0;
+  return val > limit ? limit : val < -limit ? -limit : val;
+}
+
+// ─── Train one sequence (SGD, Multi-Head) ───
 function trainSequence(seq: number[]): void {
   const seqLen = seq.length;
   if (seqLen < 2) return;
 
-  const { inputs, queries, keys, values, alphas, ctx, logits } = forwardSequence(seq);
-  const scale = Math.sqrt(embedDim);
+  const { inputs, headQueries, headKeys, headValues, headAlphas, concatCtx, ctx, logits } = forwardSequence(seq);
+  const scale = Math.sqrt(HEAD_DIM);
 
-  const dQueries = Array.from({ length: seqLen }, () => new Array(embedDim).fill(0));
-  const dKeys = Array.from({ length: seqLen }, () => new Array(embedDim).fill(0));
-  const dValues = Array.from({ length: seqLen }, () => new Array(embedDim).fill(0));
+  const dHeadQ = Array.from({ length: NUM_HEADS }, () => Array.from({ length: seqLen }, () => new Array(HEAD_DIM).fill(0)));
+  const dHeadK = Array.from({ length: NUM_HEADS }, () => Array.from({ length: seqLen }, () => new Array(HEAD_DIM).fill(0)));
+  const dHeadV = Array.from({ length: NUM_HEADS }, () => Array.from({ length: seqLen }, () => new Array(HEAD_DIM).fill(0)));
 
   for (let step = 0; step < seqLen - 1; step++) {
     const targetId = seq[step + 1];
@@ -243,59 +281,72 @@ function trainSequence(seq: number[]): void {
 
     const dCtx = new Array(embedDim).fill(0);
     for (let vocabIdx = 0; vocabIdx < tokens.size; vocabIdx++) {
-      outputBias[vocabIdx] -= LR * dLogits[vocabIdx];
+      outputBias[vocabIdx] -= LR * clip(dLogits[vocabIdx]);
       for (let dim = 0; dim < embedDim; dim++) {
         dCtx[dim] += outputWeight[vocabIdx][dim] * dLogits[vocabIdx];
-        outputWeight[vocabIdx][dim] -= LR * dLogits[vocabIdx] * ctx[step][dim];
+        outputWeight[vocabIdx][dim] -= LR * clip(dLogits[vocabIdx] * ctx[step][dim]);
       }
     }
 
-    const dAlpha = new Array(step + 1).fill(0);
-    for (let prevStep = 0; prevStep <= step; prevStep++) {
-      for (let dim = 0; dim < embedDim; dim++) {
-        dAlpha[prevStep] += dCtx[dim] * values[prevStep][dim];
-        dValues[prevStep][dim] += alphas[step][prevStep] * dCtx[dim];
+    // Backprop through W_O (outputProjWeight)
+    const dConcat = new Array(embedDim).fill(0);
+    for (let row = 0; row < embedDim; row++) {
+      for (let col = 0; col < embedDim; col++) {
+        dConcat[col] += outputProjWeight[row][col] * dCtx[row];
+        outputProjWeight[row][col] -= LR * clip(dCtx[row] * concatCtx[step][col]);
       }
     }
 
-    let dotAlpha = 0;
-    for (let prevStep = 0; prevStep <= step; prevStep++) {
-      dotAlpha += alphas[step][prevStep] * dAlpha[prevStep];
-    }
-    for (let prevStep = 0; prevStep <= step; prevStep++) {
-      const dScore = alphas[step][prevStep] * (dAlpha[prevStep] - dotAlpha) / scale;
-      for (let dim = 0; dim < embedDim; dim++) {
-        dQueries[step][dim] += dScore * keys[prevStep][dim];
-        dKeys[prevStep][dim] += dScore * queries[step][dim];
+    // Backprop per head
+    for (let h = 0; h < NUM_HEADS; h++) {
+      const hOffset = h * HEAD_DIM;
+      const dAlpha = new Array(step + 1).fill(0);
+      for (let prevStep = 0; prevStep <= step; prevStep++) {
+        for (let d = 0; d < HEAD_DIM; d++) {
+          dAlpha[prevStep] += dConcat[hOffset + d] * headValues[h][prevStep][d];
+          dHeadV[h][prevStep][d] += headAlphas[h][step][prevStep] * dConcat[hOffset + d];
+        }
+      }
+
+      let dotAlpha = 0;
+      for (let prevStep = 0; prevStep <= step; prevStep++) {
+        dotAlpha += headAlphas[h][step][prevStep] * dAlpha[prevStep];
+      }
+      for (let prevStep = 0; prevStep <= step; prevStep++) {
+        const dScore = headAlphas[h][step][prevStep] * (dAlpha[prevStep] - dotAlpha) / scale;
+        for (let d = 0; d < HEAD_DIM; d++) {
+          dHeadQ[h][step][d] += dScore * headKeys[h][prevStep][d];
+          dHeadK[h][prevStep][d] += dScore * headQueries[h][step][d];
+        }
       }
     }
   }
 
   for (let step = 0; step < seqLen; step++) {
-    for (let row = 0; row < embedDim; row++) {
-      for (let col = 0; col < embedDim; col++) {
-        queryWeight[row][col] -= LR * dQueries[step][row] * inputs[step][col];
-        keyWeight[row][col] -= LR * dKeys[step][row] * inputs[step][col];
-        valueWeight[row][col] -= LR * dValues[step][row] * inputs[step][col];
+    const dInput = new Array(embedDim).fill(0);
+    for (let h = 0; h < NUM_HEADS; h++) {
+      for (let row = 0; row < HEAD_DIM; row++) {
+        for (let col = 0; col < embedDim; col++) {
+          dInput[col] +=
+            queryWeights[h][row][col] * dHeadQ[h][step][row] +
+            keyWeights[h][row][col] * dHeadK[h][step][row] +
+            valueWeights[h][row][col] * dHeadV[h][step][row];
+          queryWeights[h][row][col] -= LR * clip(dHeadQ[h][step][row] * inputs[step][col]);
+          keyWeights[h][row][col] -= LR * clip(dHeadK[h][step][row] * inputs[step][col]);
+          valueWeights[h][row][col] -= LR * clip(dHeadV[h][step][row] * inputs[step][col]);
+        }
       }
     }
     // tokenEmbed dibekukan; hanya posEmbed yang diupdate lewat gradien
     for (let dim = 0; dim < embedDim; dim++) {
-      let dInput = 0;
-      for (let row = 0; row < embedDim; row++) {
-        dInput +=
-          queryWeight[row][dim] * dQueries[step][row] +
-          keyWeight[row][dim] * dKeys[step][row] +
-          valueWeight[row][dim] * dValues[step][row];
-      }
-      posEmbed[step][dim] -= LR * dInput;
+      posEmbed[step][dim] -= LR * clip(dInput[dim]);
     }
   }
 }
 
 // ─── Predict next token (argmax + repeat penalty) ───
 export function predictNext(seq: number[], verbose = false, recent?: Map<number, number>, penalty = 2.0): number {
-  const { logits, alphas } = forwardSequence(seq);
+  const { logits, headAlphas } = forwardSequence(seq);
   const lastLogits = logits[logits.length - 1].slice(); // copy agar tidak mutasi asli
   // Repeat penalty: kurangi logit token yang baru saja muncul
   if (recent) {
@@ -309,9 +360,15 @@ export function predictNext(seq: number[], verbose = false, recent?: Map<number,
     if (lastLogits[vocabIdx] > lastLogits[bestId]) bestId = vocabIdx;
   }
   if (verbose) {
-    const lastAlpha = alphas[alphas.length - 1]
-      .map((attnWeight, idx) => `${tokens.getWord(seq[idx]) ?? seq[idx]}:${attnWeight.toFixed(2)}`)
-      .join(" ");
+    const headColors = ["\x1b[36m", "\x1b[35m", "\x1b[34m", "\x1b[33m"];
+    const reset = "\x1b[0m";
+    const headLogs = headAlphas.map((alphasH, h) => {
+      const color = headColors[h % headColors.length];
+      const weights = alphasH[alphasH.length - 1]
+        .map((w, idx) => `${tokens.getWord(seq[idx]) ?? seq[idx]}:${w.toFixed(2)}`)
+        .join(" ");
+      return `${color}attn${h}=[${weights}]${reset}`;
+    }).join(" | ");
     const top3 = probs
       .map((prob, vocabIdx) => ({ vocabIdx, prob }))
       .sort((first, second) => second.prob - first.prob)
@@ -329,8 +386,9 @@ export function predictNext(seq: number[], verbose = false, recent?: Map<number,
       .slice(0, 5)
       .map(d => `${d.label}:${d.val.toFixed(3)}`)
       .join(" ");
-    console.log(`  [predict] attn=[${lastAlpha}] -> top3=[${top3}]`);
-    console.log(`  [embed]   ${tokens.getWord(lastToken) ?? lastToken}: ${topDims}`);
+    console.log(`  [predict] ${headLogs}`);
+    console.log(`  \x1b[32m[probs]   top3=[${top3}] -> chosen="${tokens.getWord(bestId) ?? bestId}"${reset}`);
+    console.log(`  \x1b[33m[embed]   ${tokens.getWord(lastToken) ?? lastToken}: ${topDims}${reset}`);
   }
   return bestId;
 }
@@ -431,9 +489,12 @@ export async function train(epochs = 1000): Promise<void> {
       for (let j = 0; j < src[i].length; j++) floats[offset++] = src[i][j];
   };
   writeMat(posEmbed);
-  writeMat(queryWeight);
-  writeMat(keyWeight);
-  writeMat(valueWeight);
+  for (let h = 0; h < NUM_HEADS; h++) {
+    writeMat(queryWeights[h]);
+    writeMat(keyWeights[h]);
+    writeMat(valueWeights[h]);
+  }
+  writeMat(outputProjWeight);
   writeMat(outputWeight);
   for (let i = 0; i < outputBias.length; i++) floats[offset++] = outputBias[i];
   writeFileSync(weightsFile, Buffer.from(floats.buffer));
@@ -441,5 +502,18 @@ export async function train(epochs = 1000): Promise<void> {
 }
 
 if (import.meta.main) {
-  await train();
+  const args = process.argv.slice(2);
+  let epochs = 1000;
+  const idx = args.indexOf("--epoch");
+  if (idx !== -1 && args[idx + 1]) {
+    const parsed = Number(args[idx + 1]);
+    if (parsed > 0) epochs = Math.floor(parsed);
+  } else {
+    const eqArg = args.find(a => a.startsWith("--epoch="));
+    if (eqArg) {
+      const parsed = Number(eqArg.split("=")[1]);
+      if (parsed > 0) epochs = Math.floor(parsed);
+    }
+  }
+  await train(epochs);
 }

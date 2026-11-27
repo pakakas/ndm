@@ -7,10 +7,11 @@ const SKIP_REPLY_TOKENS = new Set(["reply", "with", ":", "say"]);
 
 export async function converse(s: Session, text: string): Promise<void> {
   const showThink = Boolean((s as any).think);
+  const runtimeCtx = (s as any).runtimeCtx as Record<string, string> | undefined;
   let inReply = false;
   let streamed = false;
 
-  for (const tok of inferStream(text)) {
+  for (const tok of inferStream(text, false, runtimeCtx)) {
     if (tok === "</think>\n") {
       if (showThink && streamed) process.stdout.write(" </think>\n");
       inReply = true;

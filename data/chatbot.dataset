@@ -4,3 +4,7 @@ helo is greeting
 
 kau bisa coding ga is asking for coding capability, reply with: ya saya bisa membantu coding
 bisa coding ga is asking for coding capability
+
+cek server <IP> is check server, reply with: mengecek <IP>
+cek server unknown is unknown server, reply with: server unknown tidak ditemukan
+cek server <NUM> is unknown server
