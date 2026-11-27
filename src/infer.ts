@@ -82,8 +82,8 @@ export function* inferStream(
     const word = tokens.getWord(next) ?? `?${next}`;
     const outWord = bindings.get(word) ?? word;
 
-    // Emit </think> saat ketemu ":" atau "say" — token delimiter tidak di-yield ke user
-    if (!thinkEmitted && (word === "say" || word === ":")) {
+    // Emit </think> saat ketemu ":" — token delimiter tidak di-yield ke user
+    if (!thinkEmitted && (word === ":")) {
       yield "</think>\n";
       thinkEmitted = true;
       tokenIds.push(next);
@@ -91,12 +91,17 @@ export function* inferStream(
       continue;
     }
 
-    yield outWord;
+    yield isPunct(outWord) ? outWord : ` ${outWord}`;
     tokenIds.push(next);
     _updateRecent(recentCount, tokenIds, next, WINDOW);
 
     if (word === "\\n" || tokenIds.length >= MAX_LEN) break;
   }
+}
+
+function isPunct(w: string) {
+  const c = w.charCodeAt(0);
+  return (c >= 33 && c <= 47) || (c >= 58 && c <= 64) || (c >= 91 && c <= 96) || (c >= 123 && c <= 126);
 }
 
 function _updateRecent(map: Map<number, number>, seq: number[], next: number, window: number) {

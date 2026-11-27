@@ -13,7 +13,7 @@ export async function converse(s: Session, text: string): Promise<void> {
 
   for (const tok of inferStream(text, false, runtimeCtx)) {
     if (tok === "</think>\n") {
-      if (showThink && streamed) process.stdout.write(" </think>\n");
+      if (showThink && streamed) process.stdout.write("</think>\n");
       inReply = true;
       continue;
     }
@@ -26,7 +26,7 @@ export async function converse(s: Session, text: string): Promise<void> {
 
     if ((inReply || showThink) && tok !== "\\n") {
       if (!streamed) { process.stdout.write("bot >"); streamed = true; }
-      process.stdout.write(` ${tok}`);
+      process.stdout.write(tok);
       await Bun.sleep(50);
     }
   }
