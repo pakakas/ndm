@@ -263,6 +263,10 @@ function clip(val: number, limit = 1.0): number {
 }
 
 // ─── Train one sequence (SGD, Multi-Head) ───
+export async function trainSeq(seq: number[], epochs = 1): Promise<void> {
+  for (let epoch = 0; epoch < epochs; epoch++) trainSequence(seq);
+}
+
 function trainSequence(seq: number[]): void {
   const seqLen = seq.length;
   if (seqLen < 2) return;
@@ -398,8 +402,10 @@ export { tokens, MAX_LEN };
 // ─── Read dataset & train ───
 export async function train(epochs = 1000): Promise<void> {
   const rl = createInterface({ input: createReadStream(datasetFile, { encoding: "utf8" }) });
-  const sequences: number[][] = [];
+  let idx = 0;
+  let count = 0;
 
+  // ─── Stream langsung: line → seq → trainSeq (tanpa menyimpan sequences) ───
   for await (const line of rl) {
     const words = line
       .replace(/([?!.,;:])/g, " $1 ")
@@ -411,14 +417,16 @@ export async function train(epochs = 1000): Promise<void> {
       .map(word => tokens.get(word))
       .filter((id): id is number => id !== undefined);
 
-    if (seq.length > 1) sequences.push(seq);
+    if (seq.length > 1) {
+      const wordIds = seq.map(id => tokens.getWord(id) ?? `?${id}`);
+      console.log(`  [seq ${idx}] ${JSON.stringify(seq)}\n  [seq ${idx}] ${JSON.stringify(wordIds)}`);
+      trainSeq(seq, epochs);
+      count++;
+    }
+    idx++;
   }
 
-  console.log(`[train] loaded ${sequences.length} sequences from ${path.resolve(datasetFile).replace(process.cwd(), '.')}`);
-  sequences.forEach((seqItem, idx) => {
-    const words = seqItem.map(id => tokens.getWord(id) ?? `?${id}`);
-    console.log(`  [seq ${idx}] ${JSON.stringify(seqItem)} -> ${JSON.stringify(words)}`);
-  });
+  console.log(`[train] trained ${count} sequences × ${epochs} epochs from ${path.resolve(datasetFile).replace(process.cwd(), '.')}`);
 
   // ─── Inisialisasi tokenEmbed dari pola "X... is INTENT..., ..." di dataset ───
   // Semua kata sebelum "is" (kecuali terakhir) di-alias ke bitmask intent.
@@ -455,24 +463,6 @@ export async function train(epochs = 1000): Promise<void> {
 
       // Kata intent juga dapat bitmask-nya sendiri jika mereka ada di BIT_DIMS
       // (opsional; biarkan saja untuk saat ini)
-    }
-  }
-
-  // Filter: hanya latih sequence yang punya reply/say (bukan pure alias)
-  const replyWithToken = tokens.get("reply");
-  const trainSeqs = sequences.filter(seq => {
-    if (replyWithToken !== undefined && seq.includes(replyWithToken)) return true;
-    if (seq.includes(tokens.get("say")!)) return true;
-    return false;
-  });
-
-  console.log(`[train] training ${trainSeqs.length} seqs × ${epochs} epochs…`);
-  const logEvery = Math.max(1, Math.floor(epochs / 4));
-  for (let epoch = 0; epoch < epochs; epoch++) {
-    for (const seq of trainSeqs) trainSequence(seq);
-    if ((epoch + 1) % logEvery === 0 || epoch === 0 || epoch + 1 === epochs) {
-      const next = predictNext([tokens.get("halo")!]);
-      console.log(`[train] epoch ${epoch + 1}/${epochs}: halo → ${tokens.getWord(next)}`);
     }
   }
 
